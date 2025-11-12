@@ -132,13 +132,13 @@
 		if sudo ip netns exec vpcA-public ping -c 2 192.168.1.2 >/dev/null 2>&1; then
 			echo "❌ Unexpectedly reachable!"
 		else
-            echo "✅ Isolation working as expected"
+            		echo "✅ Isolation working as expected"
 		fi
 
 		if sudo ip netns exec vpcB-public ping -c 2 10.0.1.2 >/dev/null 2>&1; then
-            echo "❌ Unexpectedly reachable!"
+            		echo "❌ Unexpectedly reachable!"
 		else
-    		echo "✅ Isolation working as expected"
+    				echo "✅ Isolation working as expected"
 		fi
 
 		#========================================
@@ -179,7 +179,7 @@
 		sudo ip netns exec vpcB-public ping -c 2 8.8.8.8 || echo "⚠  Public subnet external ping blocked (expected)"
 
 		#========================================
-					# Firewall rule creation
+		# Firewall rule creation
 		#========================================
 		echo "=== 🚫 Blocking ICMP for VPC B ==="
 		sudo vpcctl block-icmp --VPC_NAME vpcB --POLICY_FILE /home/joe/public_no_icmp.json
@@ -190,3 +190,4 @@
 		#========================================
 		sudo ip netns exec vpcB-public ping -c 2 8.8.8.8 || echo "⚠  Public subnet external ping blocked (expected)"
 
+		echo "Testing done!"
