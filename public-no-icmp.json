@@ -1,0 +1,20 @@
+{
+  "subnet": "0.0.0.0/0",
+  "default_policy": {
+    "INPUT": "ACCEPT",
+    "OUTPUT": "ACCEPT",
+    "FORWARD": "ACCEPT"
+  },
+  "loopback": {
+    "allow_input": true,
+    "allow_output": true
+  },
+  "ingress": [],
+  "egress": [
+    {
+      "protocol": "icmp",
+      "action": "deny",
+      "destination": "0.0.0.0/0"
+    }
+  ]
+}
