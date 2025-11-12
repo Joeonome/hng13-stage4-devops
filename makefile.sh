@@ -1,130 +1,207 @@
-#!/bin/bash
-set -euo pipefail
+		#!/bin/bash
+		set -e
+		#========================================
+		# VPC Creation
+		#========================================
+		echo "=== 🏗 Creating VPC A ==="
+		sudo vpcctl create \
+		    --VPC_NAME vpcA \
+		    --CIDR_BLOCK 10.0.0.0/16 \
+		    --PUBLIC_SUBNET 10.0.1.0/24 \
+		    --PRIVATE_SUBNET 10.0.2.0/24 \
+		    --INTERNET_INTERFACE "eth0" \
+		    --PUBLIC_HOST_IP 10.0.1.2/24 \
+		    --PRIVATE_HOST_IP 10.0.2.2/24 \
+		    --FIREWALL_POLICY ~/private-policy.json
 
-#========================================
-# Helper functions
-#========================================
-info()    { echo -e "=== $1 ==="; }
-run()     { echo "⚡ $ $*"; "$@"; }
-ping_test(){ sudo ip netns exec "$1" ping -c 2 "$2" || echo "⚠  Ping $2 from $1 failed"; }
-curl_test(){
-    local ns=$1 ip=$2 name=$3
-    if curl -s -m 3 "http://$ip:8080" | grep -q "$name"; then
-        echo "✅ $ns can reach $name server ($ip)"
-    else
-        echo "❌ $ns cannot reach $name server ($ip)"
-    fi
-}
+		echo "=== 🏗 Creating VPC B ==="
+		sudo vpcctl create \
+		    --VPC_NAME vpcB \
+		    --CIDR_BLOCK 192.168.0.0/16 \
+		    --PUBLIC_SUBNET 192.168.1.0/24 \
+		    --PRIVATE_SUBNET 192.168.2.0/24 \
+		    --INTERNET_INTERFACE "eth0" \
+		    --PUBLIC_HOST_IP 192.168.1.2/24 \
+		    --PRIVATE_HOST_IP 192.168.2.2/24 \
+		    --FIREWALL_POLICY ~/private-policy.json
 
-#========================================
-# VPC Definitions
-#========================================
-VPCS=(
-    "vpcA 10.0.0.0/16 10.0.1.0/24 10.0.2.0/24 eth0 10.0.1.2/24 10.0.2.2/24 ./private-policy.json"
-    "vpcB 192.168.0.0/16 192.168.1.0/24 192.168.2.0/24 eth0 192.168.1.2/24 192.168.2.2/24 ./private-policy.json"
-)
 
-#========================================
-# Create VPCs
-#========================================
-for v in "${VPCS[@]}"; do
-    read -r NAME CIDR PUB_PRI SUB_PRIV INTF PUB_IP PRI_IP POLICY <<<"$v"
-    info "🏗 Creating $NAME"
-    sudo vpcctl create \
-        --VPC_NAME "$NAME" \
-        --CIDR_BLOCK "$CIDR" \
-        --PUBLIC_SUBNET "$PUB_PRI" \
-        --PRIVATE_SUBNET "$SUB_PRIV" \
-        --INTERNET_INTERFACE "$INTF" \
-        --PUBLIC_HOST_IP "$PUB_IP" \
-        --PRIVATE_HOST_IP "$PRI_IP" \
-        --FIREWALL_POLICY "$POLICY"
-done
 
-#========================================
-# Verify and Test VPCs
-#========================================
-for v in "${VPCS[@]}"; do
-    read -r NAME CIDR PUB_PRI SUB_PRIV INTF PUB_IP PRI_IP POLICY <<<"$v"
-    info "✅ Verifying $NAME setup"
-    
-    sudo ip netns list
-    sudo ip link show type bridge
-    sudo bridge link show
 
-    for ns in "public" "private"; do
-        sudo ip netns exec "${NAME}-${ns}" ip addr show "veth${NAME: -1}-${ns:0:3}"
-        sudo ip netns exec "${NAME}-${ns}" route -n
-    done
+		#========================================
+		# VPC A Testing
+		#========================================
+		echo "=== ✅ Verifying VPC A Setup ==="
+		sudo ip netns list
+		sudo ip link show type bridge
+		sudo bridge link show
 
-    info "🧪 Connectivity Tests for $NAME"
-    ping_test "${NAME}-public" "$PUB_IP"
-    ping_test "${NAME}-public" "$PRI_IP"
-    ping_test "${NAME}-public" "8.8.8.8"
+		sudo ip netns exec vpcA-public ip addr show vethA-pub
+		sudo ip netns exec vpcA-private ip addr show vethA-pri
 
-    ping_test "${NAME}-private" "$PRI_IP"
-    ping_test "${NAME}-private" "$PUB_IP"
-    ping_test "${NAME}-private" "8.8.8.8"
-done
+		sudo ip netns exec vpcA-public route -n
+		sudo ip netns exec vpcA-private route -n
 
-#========================================
-# Deploy workload servers
-#========================================
-info "🌐 Deploying workload servers"
-for v in "${VPCS[@]}"; do
-    read -r NAME CIDR PUB_PRI SUB_PRIV INTF PUB_IP PRI_IP POLICY <<<"$v"
-    sudo vpcctl deploy-server --VPC_NAME "$NAME" --PUBLIC_IP "$PUB_IP" --PRIVATE_IP "$PRI_IP"
-done
+		echo "=== 🧪 Connectivity Tests ==="
+		echo "--- 🔹 Public subnet tests ---"
+		sudo ip netns exec vpcA-public ping -c 2 10.0.1.1
+		sudo ip netns exec vpcA-public ping -c 2 10.0.2.2
+		sudo ip netns exec vpcA-public ping -c 2 8.8.8.8 || echo "⚠  Public subnet external ping may fail"
 
-#========================================
-# Test host & cross-namespace connectivity
-#========================================
-for v in "${VPCS[@]}"; do
-    read -r NAME CIDR PUB_PRI SUB_PRIV INTF PUB_IP PRI_IP POLICY <<<"$v"
+		echo "--- 🔸 Private subnet tests ---"
+		sudo ip netns exec vpcA-private ping -c 2 10.0.2.1
+		sudo ip netns exec vpcA-private ping -c 2 10.0.1.2
+		sudo ip netns exec vpcA-private ping -c 2 8.8.8.8 || echo "✅ Private subnet isolated"	
+		#========================================
+		# VPC B Testing
+		#========================================
+		echo "=== ✅ Verifying VPC B Setup ==="
+		sudo ip netns list
+		sudo ip link show type bridge
+		sudo bridge link show
 
-    info "🌐 Testing Host Connectivity for $NAME"
-    curl_test "Host" "$PUB_IP" "Public Subnet"
-    if ! curl -s -m 3 "http://$PRI_IP:8080" >/dev/null; then
-        echo "✅ Host cannot reach Private server (expected)"
-    else
-        echo "❌ Host can reach Private server (unexpected)"
-    fi
+		sudo ip netns exec vpcB-public ip addr show vethB-pub
+		sudo ip netns exec vpcB-private ip addr show vethB-pri
 
-    info "🧭 Cross-Namespace Connectivity for $NAME"
-    curl_test "${NAME}-public" "$PRI_IP" "Private Subnet"
-    curl_test "${NAME}-private" "$PUB_IP" "Public Subnet"
-done
+		sudo ip netns exec vpcB-public route -n
+		sudo ip netns exec vpcB-private route -n
 
-#========================================
-# VPC Peering
-#========================================
-info "🔗 Peering VPC A and VPC B"
-sudo vpcctl peer \
-    --VPC_A vpcA \
-    --VPC_B vpcB \
-    --PUBLIC_SUBNET_A 10.0.1.0/24 \
-    --PUBLIC_SUBNET_B 192.168.1.0/24
+		echo "=== 🧪 Connectivity Tests ==="
+		echo "--- 🔹 Public subnet tests ---"
+		sudo ip netns exec vpcB-public ping -c 2 192.168.1.1
+		sudo ip netns exec vpcB-public ping -c 2 192.168.2.2
+		sudo ip netns exec vpcB-public ping -c 2 8.8.8.8 || echo "⚠  Public subnet external ping may fail"
 
-# Test peering connectivity
-ping_test "vpcA-public" "192.168.1.2"
-ping_test "vpcB-public" "10.0.1.2"
+		echo "--- 🔸 Private subnet tests ---"
+		sudo ip netns exec vpcB-private ping -c 2 192.168.2.1
+		sudo ip netns exec vpcB-private ping -c 2 192.168.1.2
+		sudo ip netns exec vpcB-private ping -c 2 8.8.8.8 || echo "✅ Private subnet isolated"
 
-#========================================
-# Firewall rules
-#========================================
-info "🚫 Blocking ICMP for VPC B"
-sudo vpcctl block-icmp --VPC_NAME vpcB --POLICY_FILE /home/joe/public_no_icmp.json
-ping_test "vpcB-public" "8.8.8.8"
+		#========================================
+		# Deploy Workload Servers
+		#========================================
+		echo "=== 🌐 Deploying workload servers ==="
+		sudo vpcctl deploy-server --VPC_NAME vpcA --PUBLIC_IP 10.0.1.2 --PRIVATE_IP 10.0.2.2
+		sudo vpcctl deploy-server --VPC_NAME vpcB --PUBLIC_IP 192.168.1.2 --PRIVATE_IP 192.168.2.2	
 
-#========================================
-# Teardown
-#========================================
-info "🧹 Teardown VPCs"
-sudo vpcctl TEARDOWN_VPCS --VPC_NAME vpcA vpcB
+		#========================================
+		# Workload Testing VPC A
+		#========================================
+		echo "=== 🌐 Testing Host Connectivity for VPC A ==="
+		echo "Trying to reach PUBLIC subnet server (should succeed):"
+		curl -s -m 3 http://10.0.1.2:8080 | grep "Public Subnet" >/dev/null && echo "✅ Host can reach Public server" || echo "❌ Cannot reach Public server"
 
-info "🔹 Post-Teardown Verification"
-ip netns list
-brctl show
-ip link show type bridge
-ip link show
-sudo iptables -t nat -L -n -v
+		if ! curl -s -m 3 http://10.0.2.2:8080 >/dev/null; then
+		    echo "✅ Host cannot reach Private server (expected)"
+		else
+		    echo "❌ Host can reach Private server (unexpected)"
+		fi
+
+		echo "=== 🧭 Cross-Namespace Connectivity ==="
+		echo "From vpcA-public -> Private server:"
+		sudo ip netns exec vpcA-public curl -s -m 3 http://10.0.2.2:8080 | grep "Private Subnet" >/dev/null && echo "✅ Public can reach Private" || echo "❌ Public cannot reach Private"
+
+		echo "From vpcA-private -> Public server:"
+		sudo ip netns exec vpcA-private curl -s -m 3 http://10.0.1.2:8080 | grep "Public Subnet" >/dev/null && echo "✅ Private can reach Public" || echo "❌ Private cannot reach Public"
+
+		#========================================
+		# Workload Testing VPC B
+		#========================================
+		echo "=== 🌐 Testing Host Connectivity for VPC B ==="
+		echo "Trying to reach PUBLIC subnet server (should succeed):"
+		curl -s -m 3 http://192.168.1.2:8080 | grep "Public Subnet" >/dev/null && echo "✅ Host can reach Public server" || echo "❌ Cannot reach Public server"
+
+		if ! curl -s -m 3 http://192.168.2.2:8080 >/dev/null; then
+		    echo "✅ Host cannot reach Private server (expected)"
+		else
+		    echo "❌ Host can reach Private server (unexpected)"
+		fi
+
+
+		echo "=== 🧭 Cross-Namespace Connectivity ==="
+		echo "From vpcB-public -> Private server:"
+		sudo ip netns exec vpcB-public curl -s -m 3 http://192.168.2.2:8080 | grep "Private Subnet" >/dev/null && echo "✅ Public can reach Private" || echo "❌ Public cannot reach Private"
+
+		echo "From vpcB-private -> Public server:"
+		sudo ip netns exec vpcB-private curl -s -m 3 http://192.168.1.2:8080 | grep "Public Subnet" >/dev/null && echo "✅ Private can reach Public" || echo "❌ Private cannot reach Public"	
+
+
+		#========================================
+		# Test before Peering VPCs (should fail)
+		#========================================
+		if sudo ip netns exec vpcA-public ping -c 2 192.168.1.2 >/dev/null 2>&1; then
+			echo "❌ Unexpectedly reachable!"
+		else
+            echo "✅ Isolation working as expected"
+		fi
+
+		if sudo ip netns exec vpcB-public ping -c 2 10.0.1.2 >/dev/null 2>&1; then
+            echo "❌ Unexpectedly reachable!"
+		else
+    		echo "✅ Isolation working as expected"
+		fi
+
+		#========================================
+		# Peering VPCs
+		#========================================
+		echo "=== 🔗 Peering VPC A and VPC B ==="
+		sudo vpcctl peer \
+		    --VPC_A vpcA \
+		    --VPC_B vpcB \
+		    --PUBLIC_SUBNET_A 10.0.1.0/24 \
+		    --PUBLIC_SUBNET_B 192.168.1.0/24
+
+
+		#========================================
+		# Test after Peering VPCs (should work)
+		#========================================
+
+		echo "=== 🧭 Testing connectivity after VPC peering ==="
+
+		# From vpcA-public → vpcB-public
+		if sudo ip netns exec vpcA-public ping -c 2 192.168.1.2 >/dev/null 2>&1; then
+		    echo "✅ vpcA-public can reach vpcB-public (peering working)"
+		else
+		    echo "❌ vpcA-public cannot reach vpcB-public (peering failed)"
+		fi
+
+		# From vpcB-public → vpcA-public
+		if sudo ip netns exec vpcB-public ping -c 2 10.0.1.2 >/dev/null 2>&1; then
+		    echo "✅ vpcB-public can reach vpcA-public (peering working)"
+		else
+		    echo "❌ vpcB-public cannot reach vpcA-public (peering failed)"
+		fi
+
+
+		#========================================
+		# Before Firewall rule creation
+		#========================================
+		sudo ip netns exec vpcB-public ping -c 2 8.8.8.8 || echo "⚠  Public subnet external ping blocked (expected)"
+
+		#========================================
+					# Firewall rule creation
+		#========================================
+		echo "=== 🚫 Blocking ICMP for VPC B ==="
+		sudo vpcctl block-icmp --VPC_NAME vpcB --POLICY_FILE /home/joe/public_no_icmp.json
+
+
+		#========================================
+		# After Firewall rule creation
+		#========================================
+		sudo ip netns exec vpcB-public ping -c 2 8.8.8.8 || echo "⚠  Public subnet external ping blocked (expected)"
+
+		#========================================
+		# Teardown
+		#========================================
+		echo "=== 🧹 Teardown VPCs ==="
+		sudo vpcctl TEARDOWN_VPCS --VPC_NAME vpcA vpcB
+
+		#========================================
+		# Verification After Teardown
+		#========================================
+		echo "=== 🔹 Post-Teardown Check ==="
+		ip netns list
+		brctl show
+		ip link show type bridge
+		ip link show
+		sudo iptables -t nat -L -n -v
