@@ -1,40 +1,40 @@
 {
-  "subnet": "{PRIVATE_SUBNET}",
-  "default_policy": {
+"subnet": "{PRIVATE_SUBNET}",
+"default_policy": {
     "INPUT": "DROP",
     "OUTPUT": "DROP",
     "FORWARD": "DROP"
-  },
-  "loopback": {
+},
+"loopback": {
     "allow_input": true,
     "allow_output": true
-  },
-  "ingress": [
+},
+"ingress": [
     {
-      "description": "Allow ICMP (ping)",
-      "protocol": "icmp",
-      "action": "allow"
+    "description": "Allow ICMP (ping)",
+    "protocol": "icmp",
+    "action": "allow"
     },
     {
-      "description": "Allow inbound traffic from Public Subnet",
-      "source": "{PUBLIC_SUBNET}",
-      "destination": "{PRIVATE_SUBNET}",
-      "protocol": "all",
-      "action": "allow"
+    "description": "Allow inbound traffic from Public Subnet",
+    "source": "{PUBLIC_SUBNET}",
+    "destination": "{PRIVATE_SUBNET}",
+    "protocol": "all",
+    "action": "allow"
     }
-  ],
-  "egress": [
+],
+"egress": [
     {
-      "description": "Allow ICMP (ping)",
-      "protocol": "icmp",
-      "action": "allow"
+    "description": "Allow ICMP (ping)",
+    "protocol": "icmp",
+    "action": "allow"
     },
     {
-      "description": "Allow outbound traffic to Public Subnet",
-      "source": "{PRIVATE_SUBNET}",
-      "destination": "{PUBLIC_SUBNET}",
-      "protocol": "all",
-      "action": "allow"
+    "description": "Allow outbound traffic to Public Subnet",
+    "source": "{PRIVATE_SUBNET}",
+    "destination": "{PUBLIC_SUBNET}",
+    "protocol": "all",
+    "action": "allow"
     }
-  ]
+]
 }
