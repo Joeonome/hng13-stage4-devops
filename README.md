@@ -143,7 +143,7 @@ sudo vpcctl create \
   --INTERNET_INTERFACE eth0 \
   --PUBLIC_HOST_IP 10.0.1.2/24 \
   --PRIVATE_HOST_IP 10.0.2.2/24 \
-  --FIREWALL_POLICY ~/private-policy.json
+  --FIREWALL_POLICY /path/to/private-policy.json
 
 sudo vpcctl create \
   --VPC_NAME vpcB \
@@ -153,7 +153,7 @@ sudo vpcctl create \
   --INTERNET_INTERFACE eth0 \
   --PUBLIC_HOST_IP 192.168.1.2/24 \
   --PRIVATE_HOST_IP 192.168.2.2/24 \
-  --FIREWALL_POLICY ~/private-policy.json
+  --FIREWALL_POLICY /path/to/private-policy.json
 ```
 
 ### Deploy servers:
