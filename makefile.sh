@@ -30,7 +30,7 @@ sudo vpcctl create \
     --INTERNET_INTERFACE "eth0" \
     --PUBLIC_HOST_IP 10.0.1.2/24 \
     --PRIVATE_HOST_IP 10.0.2.2/24 \
-    --FIREWALL_POLICY ~/private-policy.json
+    --FIREWALL_POLICY ./private-policy.json
 
 echo "=== 🏗 Creating VPC B ==="
 sudo vpcctl create \
@@ -41,7 +41,7 @@ sudo vpcctl create \
     --INTERNET_INTERFACE "eth0" \
     --PUBLIC_HOST_IP 192.168.1.2/24 \
     --PRIVATE_HOST_IP 192.168.2.2/24 \
-    --FIREWALL_POLICY ~/private-policy.json
+    --FIREWALL_POLICY ./private-policy.json
 
 
 # ============================================
@@ -203,7 +203,7 @@ sudo ip netns exec vpcB-public ping -c 2 8.8.8.8 || echo "⚠  Public subnet ext
 # Firewall rule creation
 # ============================================
 echo "=== 🚫 Blocking ICMP for VPC B ==="
-sudo vpcctl block-icmp --VPC_NAME vpcB --POLICY_FILE /home/joe/public_no_icmp.json
+sudo vpcctl block-icmp --VPC_NAME vpcB --POLICY_FILE ./public-no-icmp.json
 
 
 # ============================================
