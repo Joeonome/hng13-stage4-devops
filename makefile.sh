@@ -3,25 +3,22 @@
 			
 			
 			
-# === Logging Setup ===
-LOG_FILE="deploy_$(date +%Y%m%d_%H%M%S).log"
+# ============================================
+# Setup Logging
+# ============================================
+LOG_DIR="./logs/makefile"
+mkdir -p "$LOG_DIR"
+
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+LOG_FILE="$LOG_DIR/makefile_${TIMESTAMP}.txt"
+
+# Redirect all output (stdout + stderr) to log file and console
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-echo "📜 Logging started: $LOG_FILE"
 echo "=============================================="
-
-
-
-# === Error Handling ===
-trap 'handle_error $? $LINENO' ERR
-
-handle_error() {
-    local exit_code=$1
-    local line_no=$2
-    echo "❌ Error occurred on line $line_no. Exit code: $exit_code"
-    echo "🧾 Check log file: $LOG_FILE for more details."
-    exit $exit_code
-}
+echo "📜 Logging started: $LOG_FILE"
+echo "Timestamp: $(date)"
+echo "=============================================="
 
 			#========================================
 			# VPC Creation

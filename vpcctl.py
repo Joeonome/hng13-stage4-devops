@@ -289,6 +289,11 @@ def PEER_VPCS(VPC_A, VPC_B, PUBLIC_SUBNET_A, PUBLIC_SUBNET_B):
     BRIDGE_A = f"br-{VPC_A}"
     BRIDGE_B = f"br-{VPC_B}"
 
+
+    print(f"=== 🧹 Removing global VPC isolation rules ===")
+    RUN(f"sudo iptables -C FORWARD -s 10.0.0.0/8 -d 192.168.0.0/16 -j DROP 2>/dev/null && sudo iptables -D FORWARD -s 10.0.0.0/8 -d 192.168.0.0/16 -j DROP || echo 'Rule not found: 10.0.0.0/8 → 192.168.0.0/16'")
+    RUN(f"sudo iptables -C FORWARD -s 192.168.0.0/16 -d 10.0.0.0/8 -j DROP 2>/dev/null && sudo iptables -D FORWARD -s 192.168.0.0/16 -d 10.0.0.0/8 -j DROP || echo 'Rule not found: 192.168.0.0/16 → 10.0.0.0/8'")
+
     # 1 Create veth pair if it doesn't exist
     RUN(f"ip link show {LINK_A} || sudo ip link add {LINK_A} type veth peer name {LINK_B}")
 
