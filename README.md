@@ -25,6 +25,8 @@
 - Peer VPCs for cross-VPC communication
 - Teardown VPCs cleanly
 - Fully automated **namespace and bridge management**
+- Direct CLI execution as `vpcctl`
+- Optional run of setup (`makefile.sh`) or cleanup (`teardown.sh`) scripts
 
 ---
 
@@ -33,28 +35,35 @@
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/<your-username>/vpcctl.git
-cd vpcctl
+git clone https://github.com/<your-username>/<your-repo-name>.git
+cd <your-repo-name>
 ```
 
-2. Make `vpcctl` executable and move it to `/usr/local/bin`:
+2. Make `vpcctl.py` executable and accessible system-wide:
 
 ```bash
-chmod +x vpcctl
-sudo mv vpcctl /usr/local/bin/
+chmod +x vpcctl.py
+sudo mv vpcctl.py /usr/local/bin/vpcctl
 ```
 
-3. Ensure you have the required tools:
+> ✅ You can now run commands using `vpcctl` directly from any location.
+
+3. Ensure you have required tools:
 
 ```bash
 sudo apt install iproute2 bridge-utils iptables curl -y
 ```
 
+4. (Optional) Run helper scripts in your project folder:
+
+- **Setup:** `./makefile.sh`
+- **Cleanup:** `./teardown.sh`
+
 ---
 
 ## Usage
 
-Run `vpcctl` with `--help` to see all commands:
+Run `vpcctl --help` to see available commands:
 
 ```bash
 vpcctl --help
@@ -76,56 +85,38 @@ Basic workflow:
 ### 1. Create a VPC
 
 ```bash
-sudo vpcctl create \
-  --VPC_NAME <vpc_name> \
-  --CIDR_BLOCK <vpc_cidr> \
-  --PUBLIC_SUBNET <public_cidr> \
-  --PRIVATE_SUBNET <private_cidr> \
-  --INTERNET_INTERFACE <interface> \
-  --PUBLIC_HOST_IP <public_host_ip> \
-  --PRIVATE_HOST_IP <private_host_ip> \
-  --FIREWALL_POLICY <policy_file.json>
+sudo vpcctl create   --VPC_NAME <vpc_name>   --CIDR_BLOCK <vpc_cidr>   --PUBLIC_SUBNET <public_cidr>   --PRIVATE_SUBNET <private_cidr>   --INTERNET_INTERFACE <interface>   --PUBLIC_HOST_IP <public_host_ip>   --PRIVATE_HOST_IP <private_host_ip>   --FIREWALL_POLICY <policy_file.json>
 ```
-
----
 
 ### 2. Deploy a workload server
 
 ```bash
-sudo vpcctl deploy-server \
-  --VPC_NAME <vpc_name> \
-  --PUBLIC_IP <public_ip> \
-  --PRIVATE_IP <private_ip>
+sudo vpcctl deploy-server   --VPC_NAME <vpc_name>   --PUBLIC_IP <public_ip>   --PRIVATE_IP <private_ip>
 ```
-
----
 
 ### 3. Peer two VPCs
 
 ```bash
-sudo vpcctl peer \
-  --VPC_A <vpcA_name> \
-  --VPC_B <vpcB_name> \
-  --PUBLIC_SUBNET_A <public_subnet_A> \
-  --PUBLIC_SUBNET_B <public_subnet_B>
+sudo vpcctl peer   --VPC_A <vpcA_name>   --VPC_B <vpcB_name>   --PUBLIC_SUBNET_A <public_subnet_A>   --PUBLIC_SUBNET_B <public_subnet_B>
 ```
-
----
 
 ### 4. Block ICMP for a VPC
 
 ```bash
-sudo vpcctl block-icmp \
-  --VPC_NAME <vpc_name> \
-  --POLICY_FILE <policy_file.json>
+sudo vpcctl block-icmp   --VPC_NAME <vpc_name>   --POLICY_FILE <policy_file.json>
 ```
-
----
 
 ### 5. Teardown VPCs
 
 ```bash
 sudo vpcctl TEARDOWN_VPCS --VPC_NAME <vpc_name1> <vpc_name2> ...
+```
+
+### 6. Run project scripts
+
+```bash
+vpcctl run-script --file makefile.sh
+vpcctl run-script --file teardown.sh
 ```
 
 ---
@@ -135,25 +126,9 @@ sudo vpcctl TEARDOWN_VPCS --VPC_NAME <vpc_name1> <vpc_name2> ...
 ### Create two VPCs:
 
 ```bash
-sudo vpcctl create \
-  --VPC_NAME vpcA \
-  --CIDR_BLOCK 10.0.0.0/16 \
-  --PUBLIC_SUBNET 10.0.1.0/24 \
-  --PRIVATE_SUBNET 10.0.2.0/24 \
-  --INTERNET_INTERFACE eth0 \
-  --PUBLIC_HOST_IP 10.0.1.2/24 \
-  --PRIVATE_HOST_IP 10.0.2.2/24 \
-  --FIREWALL_POLICY /path/to/private-policy.json
+sudo vpcctl create   --VPC_NAME vpcA   --CIDR_BLOCK 10.0.0.0/16   --PUBLIC_SUBNET 10.0.1.0/24   --PRIVATE_SUBNET 10.0.2.0/24   --INTERNET_INTERFACE eth0   --PUBLIC_HOST_IP 10.0.1.2/24   --PRIVATE_HOST_IP 10.0.2.2/24   --FIREWALL_POLICY ./private-policy.json
 
-sudo vpcctl create \
-  --VPC_NAME vpcB \
-  --CIDR_BLOCK 192.168.0.0/16 \
-  --PUBLIC_SUBNET 192.168.1.0/24 \
-  --PRIVATE_SUBNET 192.168.2.0/24 \
-  --INTERNET_INTERFACE eth0 \
-  --PUBLIC_HOST_IP 192.168.1.2/24 \
-  --PRIVATE_HOST_IP 192.168.2.2/24 \
-  --FIREWALL_POLICY /path/to/private-policy.json
+sudo vpcctl create   --VPC_NAME vpcB   --CIDR_BLOCK 192.168.0.0/16   --PUBLIC_SUBNET 192.168.1.0/24   --PRIVATE_SUBNET 192.168.2.0/24   --INTERNET_INTERFACE eth0   --PUBLIC_HOST_IP 192.168.1.2/24   --PRIVATE_HOST_IP 192.168.2.2/24   --FIREWALL_POLICY ./private-policy.json
 ```
 
 ### Deploy servers:
@@ -166,17 +141,13 @@ sudo vpcctl deploy-server --VPC_NAME vpcB --PUBLIC_IP 192.168.1.2 --PRIVATE_IP 1
 ### Peer VPCs:
 
 ```bash
-sudo vpcctl peer \
-  --VPC_A vpcA \
-  --VPC_B vpcB \
-  --PUBLIC_SUBNET_A 10.0.1.0/24 \
-  --PUBLIC_SUBNET_B 192.168.1.0/24
+sudo vpcctl peer   --VPC_A vpcA   --VPC_B vpcB   --PUBLIC_SUBNET_A 10.0.1.0/24   --PUBLIC_SUBNET_B 192.168.1.0/24
 ```
 
 ### Block ICMP for VPC B:
 
 ```bash
-sudo vpcctl block-icmp --VPC_NAME vpcB --POLICY_FILE ~/public_no_icmp.json
+sudo vpcctl block-icmp --VPC_NAME vpcB --POLICY_FILE ./public-no-icmp.json
 ```
 
 ### Teardown VPCs:
@@ -185,35 +156,12 @@ sudo vpcctl block-icmp --VPC_NAME vpcB --POLICY_FILE ~/public_no_icmp.json
 sudo vpcctl TEARDOWN_VPCS --VPC_NAME vpcA vpcB
 ```
 
----
-
-## Testing Connectivity
-
-- Ping between public/private subnets:
+### Run project scripts:
 
 ```bash
-sudo ip netns exec vpcA-public ping -c 2 10.0.2.2
-sudo ip netns exec vpcB-private ping -c 2 192.168.1.2
+vpcctl run-script --file makefile.sh
+vpcctl run-script --file teardown.sh
 ```
-
-- Test HTTP workloads:
-
-```bash
-curl http://10.0.1.2:8080
-curl http://192.168.2.2:8080
-```
-
----
-
-## Teardown
-
-After testing, always teardown to clean up namespaces and bridges:
-
-```bash
-sudo vpcctl TEARDOWN_VPCS --VPC_NAME vpcA vpcB
-```
-
-This removes all network namespaces, bridges, and firewall rules created by `vpcctl`.
 
 ---
 
