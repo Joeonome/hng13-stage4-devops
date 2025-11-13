@@ -300,13 +300,10 @@ def PEER_VPCS(VPC_A, VPC_B, PUBLIC_SUBNET_A, PUBLIC_SUBNET_B):
     RUN(f"sudo ip link set {LINK_A} up")
     RUN(f"sudo ip link set {LINK_B} up")
 
-    # 4 Assign IPs to the peering interfaces
-    RUN(f"ip addr show {LINK_A} | grep 10.255.255.1 || sudo ip addr add 10.255.255.1/30 dev {LINK_A}")
-    RUN(f"ip addr show {LINK_B} | grep 10.255.255.2 || sudo ip addr add 10.255.255.2/30 dev {LINK_B}")
+    # 4 Routes
+    RUN(f"sudo ip -n vpcA-public route add 192.168.1.0/24 via 10.0.1.1")
+    RUN(f"sudo ip -n vpcB-public route add 10.10.1.0/24 via 192.168.1.1")
 
-    # 5 🔥 Add routes on host bridges so each VPC knows how to reach the other
-    RUN(f"sudo ip route replace {PUBLIC_SUBNET_B} dev {BRIDGE_A}")
-    RUN(f"sudo ip route replace {PUBLIC_SUBNET_A} dev {BRIDGE_B}")
 
     # 6 Optional verification or success message
     print(f"✅ Peering established between {VPC_A} and {VPC_B}")
@@ -328,7 +325,7 @@ def TEARDOWN_VPCS(VPC_NAMES, PUBLIC_SUBNET="10.0.1.0/24", PRIVATE_SUBNET="10.0.2
 
     print("=== 🧹 Starting full teardown of VPCs ===")
 
-    # 1️⃣ Flush global iptables
+    # 1 Flush global iptables
     print("🔹 Flushing global iptables tables...")
     for table in ["filter", "nat", "mangle"]:
         RUN(f"sudo iptables -t {table} -F", CHECK=False)
@@ -336,7 +333,7 @@ def TEARDOWN_VPCS(VPC_NAMES, PUBLIC_SUBNET="10.0.1.0/24", PRIVATE_SUBNET="10.0.2
     for chain in ["INPUT", "OUTPUT", "FORWARD"]:
         RUN(f"sudo iptables -P {chain} ACCEPT", CHECK=False)
 
-    # 2️⃣ Delete namespace resources
+    # 2 Delete namespace resources
     for VPC_NAME in VPC_NAMES:
         print(f"\n=== 🧹 Cleaning VPC: {VPC_NAME} ===")
         for NS in [f"{VPC_NAME}-public", f"{VPC_NAME}-private"]:
@@ -355,7 +352,7 @@ def TEARDOWN_VPCS(VPC_NAMES, PUBLIC_SUBNET="10.0.1.0/24", PRIVATE_SUBNET="10.0.2
         for LINK in LINKS:
             RUN(f"sudo ip link delete {LINK} 2>/dev/null || true", CHECK=False)
 
-    # 3️⃣ Detect and remove inter-VPC peering veths (e.g., vethvpcA-vpcB)
+    # 3 Detect and remove inter-VPC peering veths (e.g., vethvpcA-vpcB)
     print("\n🔹 Cleaning persistent peering veth pairs...")
     try:
         RESULT = RUN("ip -o link show | awk -F': ' '{print $2}'", CHECK=False)
@@ -373,9 +370,9 @@ def TEARDOWN_VPCS(VPC_NAMES, PUBLIC_SUBNET="10.0.1.0/24", PRIVATE_SUBNET="10.0.2
                             print(f"  🧹 Removing peering veth: {LINK}")
                             RUN(f"sudo ip link delete {LINK} 2>/dev/null || true", CHECK=False)
     except Exception as e:
-        print(f"⚠️ Error scanning persistent veths: {e}")
+        print(f"⚠ Error scanning persistent veths: {e}")
 
-    # 4️⃣ Clean leftover bridges just in case
+    # 4 Clean leftover bridges just in case
     print("\n🔹 Removing leftover bridges...")
     try:
         BR_LIST = RUN("brctl show | awk 'NR>1 {print $1}'", CHECK=False)
@@ -387,7 +384,7 @@ def TEARDOWN_VPCS(VPC_NAMES, PUBLIC_SUBNET="10.0.1.0/24", PRIVATE_SUBNET="10.0.2
     except Exception:
         pass
 
-    # 5️⃣ Remove NAT MASQUERADE rules for each VPC’s public subnet
+    # 5 Remove NAT MASQUERADE rules for each VPC’s public subnet
     for VPC_NAME in VPC_NAMES:
         RUN(f"sudo iptables -t nat -D POSTROUTING -s {PUBLIC_SUBNET} -o {INTERNET_INTERFACE} -j MASQUERADE", CHECK=False)
 
@@ -497,4 +494,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-                        
