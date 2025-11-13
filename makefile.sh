@@ -196,7 +196,7 @@ echo "=============================================="
 			#========================================
 			# Before Firewall rule creation
 			#========================================
-			sudo ip netns exec vpcB-public ping -c 2 8.8.8.8 || echo "⚠  Public subnet external ping blocked (expected)"
+			sudo ip netns exec vpcB-public ping -c 2 8.8.8.8 || echo "⚠  Public subnet external ping blocked (unexpected but may happen)"
 
 			#========================================
 			# Firewall rule creation
