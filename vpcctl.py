@@ -315,75 +315,84 @@ def PEER_VPCS(VPC_A, VPC_B, PUBLIC_SUBNET_A, PUBLIC_SUBNET_B):
 
 def TEARDOWN_VPCS(VPC_NAMES, PUBLIC_SUBNET="10.0.1.0/24", PRIVATE_SUBNET="10.0.2.0/24", INTERNET_INTERFACE="eth0"):
     """
-    Completely teardown one or more VPCs, including:
+    Fully teardown one or more VPCs, including:
     - Namespaces
     - Bridges
-    - Veth pairs (including peering veths)
+    - Local and peering veth pairs
     - NAT rules
-    - Firewall rules (inside namespaces and globally)
+    - Firewall rules (global + namespaces)
     """
+
     if isinstance(VPC_NAMES, str):
         VPC_NAMES = [VPC_NAMES]
 
     print("=== 🧹 Starting full teardown of VPCs ===")
 
-    # 1. Flush global iptables first (safer)
-    print("🔹 Flushing global iptables tables")
-    RUN("sudo iptables -F", CHECK=False)
-    RUN("sudo iptables -X", CHECK=False)
-    RUN("sudo iptables -t nat -F", CHECK=False)
-    RUN("sudo iptables -t nat -X", CHECK=False)
-    RUN("sudo iptables -t mangle -F", CHECK=False)
-    RUN("sudo iptables -t mangle -X", CHECK=False)
-    RUN("sudo iptables -P INPUT ACCEPT", CHECK=False)
-    RUN("sudo iptables -P OUTPUT ACCEPT", CHECK=False)
-    RUN("sudo iptables -P FORWARD ACCEPT", CHECK=False)
+    # 1️⃣ Flush global iptables
+    print("🔹 Flushing global iptables tables...")
+    for table in ["filter", "nat", "mangle"]:
+        RUN(f"sudo iptables -t {table} -F", CHECK=False)
+        RUN(f"sudo iptables -t {table} -X", CHECK=False)
+    for chain in ["INPUT", "OUTPUT", "FORWARD"]:
+        RUN(f"sudo iptables -P {chain} ACCEPT", CHECK=False)
 
-    # 2. Delete per-VPC resources
+    # 2️⃣ Delete namespace resources
     for VPC_NAME in VPC_NAMES:
-        print(f"=== 🧹 Cleaning VPC: {VPC_NAME} ===")
-        NS_LIST = [f"{VPC_NAME}-public", f"{VPC_NAME}-private"]
-        for NS in NS_LIST:
-            print(f"  - Flushing namespace {NS}")
-            RUN(f"sudo ip netns exec {NS} iptables -F", CHECK=False)
-            RUN(f"sudo ip netns exec {NS} iptables -X", CHECK=False)
-            RUN(f"sudo ip netns exec {NS} iptables -t nat -F", CHECK=False)
-            RUN(f"sudo ip netns exec {NS} iptables -t nat -X", CHECK=False)
-            RUN(f"sudo ip netns exec {NS} iptables -t mangle -F", CHECK=False)
-            RUN(f"sudo ip netns exec {NS} iptables -t mangle -X", CHECK=False)
-
-            # Kill any processes in the namespace
+        print(f"\n=== 🧹 Cleaning VPC: {VPC_NAME} ===")
+        for NS in [f"{VPC_NAME}-public", f"{VPC_NAME}-private"]:
+            print(f"  - Deleting namespace {NS}")
             RUN(f"sudo ip netns pids {NS} | xargs -r sudo kill -9", CHECK=False)
-            # Delete the namespace
             RUN(f"sudo ip netns delete {NS} 2>/dev/null || true", CHECK=False)
 
-        # Delete veths and bridges (per VPC)
+        # Per-VPC bridge + veth cleanup
         LINKS = [
-            f"veth{VPC_NAME[-1]}-pub-br",
             f"veth{VPC_NAME[-1]}-pub",
-            f"veth{VPC_NAME[-1]}-pri-br",
+            f"veth{VPC_NAME[-1]}-pub-br",
             f"veth{VPC_NAME[-1]}-pri",
+            f"veth{VPC_NAME[-1]}-pri-br",
             f"br-{VPC_NAME}"
         ]
         for LINK in LINKS:
             RUN(f"sudo ip link delete {LINK} 2>/dev/null || true", CHECK=False)
 
-    # 3. Delete any leftover peering veths
-    print("🔹 Cleaning leftover veth interfaces")
+    # 3️⃣ Detect and remove inter-VPC peering veths (e.g., vethvpcA-vpcB)
+    print("\n🔹 Cleaning persistent peering veth pairs...")
     try:
-        RESULT = RUN("ip link show | grep veth | awk -F: '{print $2}' | tr -d ' '", CHECK=False)
+        RESULT = RUN("ip -o link show | awk -F': ' '{print $2}'", CHECK=False)
         for LINK in RESULT.splitlines():
             LINK = LINK.strip()
-            if LINK.startswith("veth") and all(LINK not in v for v in LINKS):
-                RUN(f"sudo ip link delete {LINK} 2>/dev/null || true", CHECK=False)
+            # Normalize name (remove @pair suffix)
+            if '@' in LINK:
+                LINK = LINK.split('@')[0]
+
+            # Check all combinations (vethvpcA-vpcB, vethvpcB-vpcA)
+            for A in VPC_NAMES:
+                for B in VPC_NAMES:
+                    if A != B:
+                        if LINK == f"veth{A}-{B}" or LINK == f"veth{B}-{A}":
+                            print(f"  🧹 Removing peering veth: {LINK}")
+                            RUN(f"sudo ip link delete {LINK} 2>/dev/null || true", CHECK=False)
+    except Exception as e:
+        print(f"⚠️ Error scanning persistent veths: {e}")
+
+    # 4️⃣ Clean leftover bridges just in case
+    print("\n🔹 Removing leftover bridges...")
+    try:
+        BR_LIST = RUN("brctl show | awk 'NR>1 {print $1}'", CHECK=False)
+        for BR in BR_LIST.splitlines():
+            BR = BR.strip()
+            if BR.startswith("br-"):
+                RUN(f"sudo ip link set {BR} down 2>/dev/null || true", CHECK=False)
+                RUN(f"sudo brctl delbr {BR} 2>/dev/null || true", CHECK=False)
     except Exception:
         pass
 
-    # 4. Remove NAT MASQUERADE rules for public subnets
+    # 5️⃣ Remove NAT MASQUERADE rules for each VPC’s public subnet
     for VPC_NAME in VPC_NAMES:
         RUN(f"sudo iptables -t nat -D POSTROUTING -s {PUBLIC_SUBNET} -o {INTERNET_INTERFACE} -j MASQUERADE", CHECK=False)
 
-    print("✅ Full teardown complete for VPCs:", ", ".join(VPC_NAMES))
+    print("\n✅ Full teardown complete for:", ", ".join(VPC_NAMES))
+
 
 
 def main():
