@@ -35,8 +35,8 @@
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/<your-username>/<your-repo-name>.git
-cd <your-repo-name>
+git clone https://github.com/Joeonome/hng13-stage4-devops.git
+cd hng13-stage4-devops
 ```
 
 2. Make `vpcctl.py` executable and accessible system-wide:
@@ -56,8 +56,8 @@ sudo apt install iproute2 bridge-utils iptables curl -y
 
 4. (Optional) Run helper scripts in your project folder:
 
-- **Setup:** `./makefile.sh`
-- **Cleanup:** `./teardown.sh`
+- **Setup:** `bash ./makefile.sh`
+- **Cleanup:** `bash ./teardown.sh`
 
 ---
 
